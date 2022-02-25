@@ -1,5 +1,7 @@
 module Peano where
 
+-- Chapter 4: Peano Numbers
+
 data Peano = Z | S Peano
     deriving Show
 

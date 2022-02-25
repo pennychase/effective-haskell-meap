@@ -1,5 +1,7 @@
 module Calculator where
 
+-- Chapter 4: Reverse Polish calculator 
+
 import Text.Read (readEither)
 
 data Expr =

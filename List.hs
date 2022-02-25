@@ -1,5 +1,7 @@
 module List where
 
+-- Chapter 4: Inductively Defined List type
+
 data List a = Empty | Cons a (List a)
     deriving Show
 
@@ -35,3 +37,7 @@ listTail (Cons _ xs) = xs
 
 listReverse :: List a -> List a
 listReverse = listFoldl (flip Cons) Empty
+
+listMap :: (a -> b) -> List a -> List b
+listMap _ Empty = Empty
+listMap f (Cons x xs) = Cons (f x) (listMap f xs)

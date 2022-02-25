@@ -1,5 +1,7 @@
 module Fibs where
 
+-- Chapter 2: Fibonacci Series
+
 fib n 
     | n == 0 = 0
     | n == 1 = 1
