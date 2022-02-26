@@ -1,5 +1,7 @@
 module PartyBudget where
 
+-- Chapter 2: Party Budget
+
 import Data.List
 
 -- First version - food cost based on person
