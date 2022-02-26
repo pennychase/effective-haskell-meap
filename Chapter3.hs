@@ -39,3 +39,14 @@ showBiggest =
         biggestInfo = sumBiggest [[1,1,2,3,4,4],[1,2,5,5],[-1,-2,5,-10,5]]
     in print $ "sumBiggest says: " <> biggestInfo
 
+
+-- Exercises
+
+mySwap :: (a,b) -> (b,a)
+mySwap (x, y) = (y, x)
+
+myConcat :: Foldable t => t [a] -> [a]
+myConcat = foldr (<>) mempty 
+
+myId :: a -> a
+myId x = x
