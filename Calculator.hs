@@ -12,16 +12,23 @@ data Expr =
     | Div Expr Expr
     deriving Show
 
-eval :: Expr -> Int
+eval :: Expr -> Either String Int
 eval expr =
     case expr of
-        Lit num -> num
+        Lit num ->  Right num
         Add arg1 arg2 -> eval' (+) arg1 arg2
         Sub arg1 arg2 -> eval' (-) arg1 arg2
         Mul arg1 arg2 -> eval' (*) arg1 arg2
-        Div arg1 arg2 -> eval' div arg1 arg2
+        Div arg1 arg2 -> if eval arg2 == (Right 0)
+                            then (Left "Can't divide by 0")
+                            else eval' div arg1 arg2
     where
-        eval' op arg1 arg2 = op (eval arg1) (eval arg2)
+        eval' op arg1 arg2 = 
+            case eval arg1 of
+                Left err -> Left err
+                Right arg1' -> case eval arg2 of
+                    Left err -> Left err
+                    Right arg2' -> Right $ op arg1' arg2'
 
 parse :: String -> Either String Expr
 parse str =
@@ -60,5 +67,20 @@ run expr =
     case parse expr of
         Left err -> "Error: " <> err
         Right expr' ->
-            let answer = show $ eval expr'
-            in "The answer is: " <> answer
+            case eval expr' of
+                Left err -> "Error: " <> err
+                Right expr'' ->
+                    let answer = show expr''
+                    in "The answer is: " <> answer
+
+
+prettyPrint :: Expr -> String
+prettyPrint expr =
+    case expr of
+        Lit num ->  show num
+        Add arg1 arg2 -> prettyPrint arg1 <> " + " <> prettyPrint arg2
+        Sub arg1 arg2 -> prettyPrint arg1 <> " - " <> prettyPrint arg2
+        Mul arg1 arg2 -> prettyPrint arg1 <> " * " <> prettyPrint arg2
+        Div arg1 arg2 -> prettyPrint arg1 <> " / " <> prettyPrint arg2
+
+
