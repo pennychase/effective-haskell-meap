@@ -27,3 +27,4 @@ addPeano (S n) p = addPeano n (S p)
 mulPeano :: Peano -> Peano -> Peano
 mulPeano Z _ = Z
 mulPeano (S n) p = addPeano (mulPeano n p) p
+
