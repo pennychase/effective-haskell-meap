@@ -6,6 +6,8 @@ module Nullable where
 import Prelude hiding (null)
 import Data.Kind
 
+-- Chapter 6 Exercises
+
 -- lists are nullable, so when testing isNull and isNull' for Maybe and tuples, you need to apply 
 -- saturated lists:
 --      isNull (Nothing :: Maybe [Int]) ==> True

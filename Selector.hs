@@ -5,8 +5,9 @@ module Selector where
 
 import Data.Kind
 
+-- Chpater 6 Examples
 
--- Select is a simplified version of Alternative
+-- Select is a simplified version of Alternative that is polymorphic over parametrized types
 
 class Select (f :: Type -> Type)  where
     empty :: f a
