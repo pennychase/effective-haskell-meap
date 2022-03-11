@@ -3,9 +3,13 @@
 
 module HCat ( runHCat ) where
 
-import qualified System.Environment as Env
 import qualified Control.Exception as Exception
+import qualified Data.ByteString as BS
+import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
+import qualified System.Environment as Env
 import qualified System.IO.Error as IOError
+
 
 -- Error Handling version 2
 -- Unify error handling approach by throwing an exception after handle args (turning the Either result into an IO Error)
@@ -15,8 +19,8 @@ runHCat =
     withErrorHandling $
         handleArgs
             >>= eitherToErr
-            >>= readFile
-            >>= putStrLn
+            >>= TextIO.readFile
+            >>= TextIO.putStrLn
     where
         withErrorHandling :: IO () -> IO ()
         withErrorHandling ioAction = Exception.catch ioAction $
