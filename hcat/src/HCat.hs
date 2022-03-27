@@ -9,6 +9,7 @@ import qualified Data.ByteString as BS
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import qualified System.Environment as Env
+import System.IO
 import qualified System.IO.Error as IOError
 import System.Info
 import qualified System.Process as Process
@@ -16,18 +17,16 @@ import qualified System.Process as Process
 -- Top level
 
 runHCat :: IO ()
-runHCat =
-    withErrorHandling $
-        handleArgs
-            >>= eitherToErr
-            >>= TextIO.readFile
-            >>= TextIO.putStrLn
-    where
-        withErrorHandling :: IO () -> IO ()
-        withErrorHandling ioAction = Exception.catch ioAction $
-            \e -> print "I ran into an error!" >> print @IOError e
+runHCat = 
+    handleArgs
+    >>= eitherToErr
+    >>= flip openFile ReadMode 
+    >>= TextIO.hGetContents
+    >>= \contents ->
+        getTerminalSize >>= \termSize ->
+            let pages = paginate termSize contents
+            in showPages pages
 
--- Error Handling version 2
 -- Unify error handling approach by throwing an exception after handle args (turning the Either result into an IO Error)
 handleArgs :: IO (Either String FilePath)
 handleArgs = parseArgs <$> Env.getArgs
@@ -42,6 +41,18 @@ eitherToErr :: Show a => Either a b -> IO b
 eitherToErr (Right a) = return a
 eitherToErr (Left e) = Exception.throwIO . IOError.userError $ show e
 
+-- Get user input to page or quit
+data ContinueCancel = Continue | Cancel deriving (Eq, Show)
+
+getContinue :: IO ContinueCancel
+getContinue =
+    hSetBuffering stdin NoBuffering 
+    >> hSetEcho stdin False
+    >> hGetChar stdin
+    >>= \case
+        ' ' -> return Continue
+        'q' -> return Cancel
+        _  -> getContinue
 
 -- Pager
 
@@ -71,6 +82,21 @@ wordWrap lineLength lineText
                 in (wrappedLine, Text.tail rest)
             | otherwise = softWrap hardwrappedText (textIndex - 1) 
 
+-- Show pages
+
+showPages :: [Text.Text] -> IO ()
+showPages [] = return ()
+showPages (page:pages) =
+    clearScreen
+    >> TextIO.putStrLn page
+    >> getContinue
+    >>= \case
+            Continue -> showPages pages
+            Cancel -> return ()
+
+clearScreen :: IO ()
+clearScreen = BS.putStr "\^[[1J\^[[1;1H"
+
 -- Terminal dimensions
 
 data ScreenDimensions = ScreenDimensions
@@ -95,8 +121,8 @@ getTerminalSize =
                         cols' = read $ init cols
                     in pure $ ScreenDimensions lines' cols'
 
--- Paginate accroding to screen size
--- Can test with: mapM_ TextIO.putStrLn $ paginate (Screen Dimensions 5 10) "Some ling text ..."
+-- Paginate according to screen size
+-- Can test with: 46(Screen Dimensions 5 10) "Some ling text ..."
 paginate :: ScreenDimensions -> Text.Text -> [Text.Text]
 paginate (ScreenDimensions rows cols) text =
     let 
