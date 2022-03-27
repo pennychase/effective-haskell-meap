@@ -10,7 +10,8 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import qualified System.Environment as Env
 import qualified System.IO.Error as IOError
-
+import System.Info
+import qualified System.Process as Process
 
 -- Top level
 
@@ -76,6 +77,23 @@ data ScreenDimensions = ScreenDimensions
     { screenRows :: Int 
     , screenColumns :: Int 
     } deriving Show
+
+getTerminalSize :: IO ScreenDimensions
+getTerminalSize =
+    case System.Info.os of
+        "darwin" -> tputScreenDimensions
+        "linus" -> tputScreenDimensions
+        _other -> pure $ ScreenDimensions 25 80
+    where
+        tputScreenDimensions :: IO ScreenDimensions
+        tputScreenDimensions =
+            Process.readProcess "tput" ["lines"] ""
+            >>= \lines ->
+                Process.readProcess "tput" ["cols"] ""
+                >>= \cols ->
+                    let lines' = read $ init lines
+                        cols' = read $ init cols
+                    in pure $ ScreenDimensions lines' cols'
 
 -- Paginate accroding to screen size
 -- Can test with: mapM_ TextIO.putStrLn $ paginate (Screen Dimensions 5 10) "Some ling text ..."
