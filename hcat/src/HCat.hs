@@ -23,15 +23,14 @@ import qualified Text.Printf as Printf
 -- Top level
 
 runHCat :: IO ()
-runHCat = 
-    handleArgs
-    >>= eitherToErr
-    >>= flip openFile ReadMode 
-    >>= TextIO.hGetContents
-    >>= \contents ->
-        getTerminalSize >>= \termSize ->
-            let pages = paginate termSize contents
-            in showPages pages
+runHCat = do
+    targetFilePath <- eitherToErr =<< handleArgs
+    contents <- TextIO.hGetContents =<< openFile targetFilePath ReadMode 
+    termSize <- getTerminalSize
+    hSetBuffering stdout NoBuffering
+    finfo <- fileInfo targetFilePath
+    let pages = paginate termSize finfo contents
+    showPages pages
 
 -- Unify error handling approach by throwing an exception after handle args (turning the Either result into an IO Error)
 handleArgs :: IO (Either String FilePath)
@@ -128,14 +127,21 @@ getTerminalSize =
                     in pure $ ScreenDimensions lines' cols'
 
 -- Paginate according to screen size
--- Can test with: 46(Screen Dimensions 5 10) "Some ling text ..."
-paginate :: ScreenDimensions -> Text.Text -> [Text.Text]
-paginate (ScreenDimensions rows cols) text =
+-- Need to leave room for status bar (so each page is of length rows - 1)
+-- and pad with empty lines to fill the vertical space
+paginate :: ScreenDimensions -> FileInfo -> Text.Text -> [Text.Text]
+paginate (ScreenDimensions rows cols) finfo text =
     let 
-        unwrappedLines = Text.lines text
-        wrappedLines = concatMap (wordWrap cols) unwrappedLines
-        pageLines = groupsOf rows wrappedLines
-    in map Text.unlines pageLines
+        rows' = rows - 1
+        wrappedLines = concatMap (wordWrap cols) (Text.lines text)
+        pages = map (Text.unlines . padTo rows') $ groupsOf rows' wrappedLines
+        pageCount = length pages
+        statusLines = map (formatFileInfo finfo cols pageCount) [1 .. pageCount]
+    in zipWith (<>) pages statusLines
+    where
+        padTo :: Int -> [Text.Text] -> [Text.Text]
+        padTo lineCount rowsToPad =
+            take lineCount $ rowsToPad <> repeat ""
 
 
 -- Status Line
@@ -150,19 +156,18 @@ data FileInfo = FileInfo
     } deriving Show
 
 fileInfo :: FilePath -> IO FileInfo
-fileInfo filePath =
-    Directory.getPermissions filePath >>= \perms ->
-        Directory.getModificationTime filePath >>= \mtime ->
-            TextIO.readFile filePath >>= \contents ->
-                let size = Text.length contents
-                in return FileInfo
-                    { filePath = filePath
-                    , fileSize = size
-                    , fileMTime = mtime
-                    , fileReadable = Directory.readable perms
-                    , fileWriteable = Directory.writable perms
-                    , fileExecutable = Directory.executable perms 
-                    }
+fileInfo filePath = do
+    perms <- Directory.getPermissions filePath
+    mtime <- Directory.getModificationTime filePath
+    size <- Text.length <$> TextIO.readFile filePath
+    return FileInfo
+        { filePath = filePath
+        , fileSize = size
+        , fileMTime = mtime
+        , fileReadable = Directory.readable perms
+        , fileWriteable = Directory.writable perms
+        , fileExecutable = Directory.executable perms 
+        }
 
 formatFileInfo :: FileInfo -> Int -> Int -> Int -> Text.Text
 formatFileInfo FileInfo {..} maxWidth totalPages currentPage =
