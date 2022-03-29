@@ -20,27 +20,30 @@ import qualified System.IO.Error as IOError
 import qualified System.Process as Process
 import qualified Text.Printf as Printf
 
+
 -- Top level
 
 runHCat :: IO ()
 runHCat = do
-    targetFilePath <- eitherToErr =<< handleArgs
-    contents <- TextIO.hGetContents =<< openFile targetFilePath ReadMode 
-    termSize <- getTerminalSize
-    hSetBuffering stdout NoBuffering
-    finfo <- fileInfo targetFilePath
-    let pages = paginate termSize finfo contents
-    showPages pages
+    files <- eitherToErr =<< handleArgs
+    mapM_ runHCat' files
+    where
+        runHCat' targetFilePath = do 
+            contents <- TextIO.hGetContents =<< openFile targetFilePath ReadMode 
+            termSize <- getTerminalSize
+            hSetBuffering stdout NoBuffering
+            finfo <- fileInfo targetFilePath
+            let pages = paginate termSize finfo contents
+            showPages pages
 
 -- Unify error handling approach by throwing an exception after handle args (turning the Either result into an IO Error)
-handleArgs :: IO (Either String FilePath)
+handleArgs :: IO (Either String [FilePath])
 handleArgs = parseArgs <$> Env.getArgs
     where
         parseArgs arguments =
             case arguments of
                 []      -> Left "No filename provided"
-                [fname] -> Right fname
-                _       -> Left "Multiple files are not supported"
+                files -> Right files
 
 eitherToErr :: Show a => Either a b -> IO b
 eitherToErr (Right a) = return a
@@ -117,14 +120,13 @@ getTerminalSize =
         _other -> pure $ ScreenDimensions 25 80
     where
         tputScreenDimensions :: IO ScreenDimensions
-        tputScreenDimensions =
-            Process.readProcess "tput" ["lines"] ""
-            >>= \lines ->
-                Process.readProcess "tput" ["cols"] ""
-                >>= \cols ->
-                    let lines' = read $ init lines
-                        cols' = read $ init cols
-                    in pure $ ScreenDimensions lines' cols'
+        tputScreenDimensions = do
+            lines <- Process.readProcess "tput" ["lines"] ""
+            cols <- Process.readProcess "tput" ["cols"] ""
+            let lines' = read . Text.unpack $ Text.strip . Text.pack $ lines
+            let cols' = read . Text.unpack  $ Text.strip . Text.pack $ cols
+            return $ ScreenDimensions lines' cols'
+
 
 -- Paginate according to screen size
 -- Need to leave room for status bar (so each page is of length rows - 1)
