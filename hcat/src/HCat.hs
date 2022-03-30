@@ -34,7 +34,7 @@ runHCat = do
             hSetBuffering stdout NoBuffering
             finfo <- fileInfo targetFilePath
             let pages = paginate termSize finfo contents
-            showPages pages
+            showPages pages []
 
 -- Unify error handling approach by throwing an exception after handle args (turning the Either result into an IO Error)
 handleArgs :: IO (Either String [FilePath])
@@ -50,15 +50,16 @@ eitherToErr (Right a) = return a
 eitherToErr (Left e) = Exception.throwIO . IOError.userError $ show e
 
 -- Get user input to page or quit
-data ContinueCancel = Continue | Cancel deriving (Eq, Show)
+data Command = Continue | Backwards | Cancel deriving (Eq, Show)
 
-getContinue :: IO ContinueCancel
+getContinue :: IO Command
 getContinue =
     hSetBuffering stdin NoBuffering 
     >> hSetEcho stdin False
     >> hGetChar stdin
     >>= \case
         ' ' -> return Continue
+        'b' -> return Backwards
         'q' -> return Cancel
         _  -> getContinue
 
@@ -92,14 +93,17 @@ wordWrap lineLength lineText
 
 -- Show pages
 
-showPages :: [Text.Text] -> IO ()
-showPages [] = return ()
-showPages (page:pages) =
+showPages :: [Text.Text] -> [Text.Text] -> IO ()
+showPages [] _ = return ()
+showPages (page:pages) stack =
     clearScreen
     >> TextIO.putStrLn page
     >> getContinue
     >>= \case
-            Continue -> showPages pages
+            Continue -> showPages pages (page:stack)
+            Backwards -> if null stack 
+                            then showPages (page : pages) (tail stack)
+                            else showPages ((head stack) : page : pages) (tail stack)
             Cancel -> return ()
 
 clearScreen :: IO ()
