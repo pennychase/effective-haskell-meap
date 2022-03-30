@@ -121,12 +121,23 @@ getTerminalSize =
     where
         tputScreenDimensions :: IO ScreenDimensions
         tputScreenDimensions = do
-            lines <- Process.readProcess "tput" ["lines"] ""
-            cols <- Process.readProcess "tput" ["cols"] ""
-            let lines' = read . Text.unpack $ Text.strip . Text.pack $ lines
-            let cols' = read . Text.unpack  $ Text.strip . Text.pack $ cols
-            return $ ScreenDimensions lines' cols'
+            lines <- getDim "lines" 25
+            cols <- getDim "cols" 80
+            return $ ScreenDimensions lines cols
 
+        getDim :: String -> Int -> IO Int
+        getDim dim def = do
+            Exception.catch (let str = Process.readProcess "tput" [dim] "" in seq str $ readDim str) handleErr
+            where
+                handleErr :: Exception.SomeException -> IO Int
+                handleErr _ = do
+                    return def
+
+                readDim :: IO String -> IO Int
+                readDim str = do
+                    str' <- str
+                    let str'' = Text.unpack . Text.strip. Text.pack $ str'
+                    Exception.catch (let i = read str'' in seq i $ return i) handleErr
 
 -- Paginate according to screen size
 -- Need to leave room for status bar (so each page is of length rows - 1)
