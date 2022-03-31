@@ -26,15 +26,17 @@ import qualified Text.Printf as Printf
 runHCat :: IO ()
 runHCat = do
     files <- eitherToErr =<< handleArgs
-    mapM_ runHCat' files
-    where
-        runHCat' targetFilePath = do 
-            contents <- TextIO.hGetContents =<< openFile targetFilePath ReadMode 
-            termSize <- getTerminalSize
-            hSetBuffering stdout NoBuffering
-            finfo <- fileInfo targetFilePath
-            let pages = paginate termSize finfo contents
-            showPages pages []
+    mapM_ runHCat1 files
+
+-- Page a single file
+runHCat1 :: FilePath -> IO ()
+runHCat1 targetFilePath = do 
+    contents <- TextIO.hGetContents =<< openFile targetFilePath ReadMode 
+    termSize <- getTerminalSize
+    hSetBuffering stdout NoBuffering
+    finfo <- fileInfo targetFilePath
+    let pages = paginate termSize finfo contents
+    showPages pages []
 
 -- Unify error handling approach by throwing an exception after handle args (turning the Either result into an IO Error)
 handleArgs :: IO (Either String [FilePath])
@@ -50,7 +52,7 @@ eitherToErr (Right a) = return a
 eitherToErr (Left e) = Exception.throwIO . IOError.userError $ show e
 
 -- Get user input to page or quit
-data Command = Continue | Backwards | Cancel deriving (Eq, Show)
+data Command = Continue | Backwards | Help | Cancel deriving (Eq, Show)
 
 getContinue :: IO Command
 getContinue =
@@ -60,6 +62,7 @@ getContinue =
     >>= \case
         ' ' -> return Continue
         'b' -> return Backwards
+        '?' -> return Help
         'q' -> return Cancel
         _  -> getContinue
 
@@ -102,12 +105,17 @@ showPages (page:pages) stack =
     >>= \case
             Continue -> showPages pages (page:stack)
             Backwards -> if null stack 
-                            then showPages (page : pages) (tail stack)
+                            then showPages (page : pages) stack
                             else showPages ((head stack) : page : pages) (tail stack)
+            Help -> showHelp >> showPages pages (page:stack)
             Cancel -> return ()
 
 clearScreen :: IO ()
 clearScreen = BS.putStr "\^[[1J\^[[1;1H"
+
+showHelp :: IO ()
+showHelp = runHCat1 "/Users/mpchase/Documents/Programming/Haskell/Learning-Haskell/Books/effective-haskell/hcat/src/help.txt"
+
 
 -- Terminal dimensions
 

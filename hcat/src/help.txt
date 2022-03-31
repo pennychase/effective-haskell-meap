@@ -1,0 +1,14 @@
+HCat HELP
+
+HCat is a simple pager.
+
+    Usage: hcat [files]
+
+Summary of commands:
+
+    SPACE: page forward
+    b: page backwards
+    r: reflow pagination to use new screen dimensions
+    q: quit
+    ?: page the help file
+
