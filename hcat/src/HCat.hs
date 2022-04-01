@@ -121,7 +121,7 @@ paginateAndShow finfo contents stack = do
                         paginateAndShow finfo 
                                         (unpaginate (page:pages)) 
                                         (paginate termSize' finfo (unpaginate stack))
-                    Help -> showHelp >> showPages pages (page:stack)
+                    Help -> showHelp >> showPages (page:pages) stack
                     Cancel -> return ()
 
 clearScreen :: IO ()
