@@ -29,14 +29,13 @@ runHCat = do
     mapM_ runHCat1 files
 
 -- Page a single file
+-- Read the file contents and get fileInfo, and then pass to paginateAndShow (to enable reflowing when dimensions change)
 runHCat1 :: FilePath -> IO ()
 runHCat1 targetFilePath = do 
     contents <- TextIO.hGetContents =<< openFile targetFilePath ReadMode 
-    termSize <- getTerminalSize
     hSetBuffering stdout NoBuffering
     finfo <- fileInfo targetFilePath
-    let pages = paginate termSize finfo contents
-    showPages pages []
+    paginateAndShow finfo contents []
 
 -- Unify error handling approach by throwing an exception after handle args (turning the Either result into an IO Error)
 handleArgs :: IO (Either String [FilePath])
@@ -52,7 +51,7 @@ eitherToErr (Right a) = return a
 eitherToErr (Left e) = Exception.throwIO . IOError.userError $ show e
 
 -- Get user input to page or quit
-data Command = Continue | Backwards | Help | Cancel deriving (Eq, Show)
+data Command = Continue | Backwards | Reflow | Help | Cancel deriving (Eq, Show)
 
 getContinue :: IO Command
 getContinue =
@@ -62,6 +61,7 @@ getContinue =
     >>= \case
         ' ' -> return Continue
         'b' -> return Backwards
+        'r' -> return Reflow
         '?' -> return Help
         'q' -> return Cancel
         _  -> getContinue
@@ -94,21 +94,35 @@ wordWrap lineLength lineText
                 in (wrappedLine, Text.tail rest)
             | otherwise = softWrap hardwrappedText (textIndex - 1) 
 
--- Show pages
+-- Paginate the file contents and show the pages. 
+-- We maintain a stack of the pages that have been viewed so we can pop the stack and redisplay pages when 
+-- paging backwards
+-- We reflow the pagination by unpaginating the pages and the stack, and then paginate with the new dimensions
+paginateAndShow :: FileInfo -> Text.Text -> [Text.Text] -> IO ()
+paginateAndShow finfo contents stack = do
+    termSize <- getTerminalSize
+    let pages = paginate termSize finfo contents
+    showPages pages stack
 
-showPages :: [Text.Text] -> [Text.Text] -> IO ()
-showPages [] _ = return ()
-showPages (page:pages) stack =
-    clearScreen
-    >> TextIO.putStrLn page
-    >> getContinue
-    >>= \case
-            Continue -> showPages pages (page:stack)
-            Backwards -> if null stack 
-                            then showPages (page : pages) stack
-                            else showPages ((head stack) : page : pages) (tail stack)
-            Help -> showHelp >> showPages pages (page:stack)
-            Cancel -> return ()
+    where
+        showPages :: [Text.Text] -> [Text.Text] -> IO ()
+        showPages [] _ = return ()
+        showPages (page:pages) stack =
+            clearScreen
+            >> TextIO.putStrLn page
+            >> getContinue
+            >>= \case
+                    Continue -> showPages pages (page:stack)
+                    Backwards -> if null stack 
+                                    then showPages (page : pages) stack
+                                    else showPages ((head stack) : page : pages) (tail stack)
+                    Reflow -> do
+                        termSize' <- getTerminalSize
+                        paginateAndShow finfo 
+                                        (unpaginate (page:pages)) 
+                                        (paginate termSize' finfo (unpaginate stack))
+                    Help -> showHelp >> showPages pages (page:stack)
+                    Cancel -> return ()
 
 clearScreen :: IO ()
 clearScreen = BS.putStr "\^[[1J\^[[1;1H"
@@ -168,6 +182,9 @@ paginate (ScreenDimensions rows cols) finfo text =
         padTo lineCount rowsToPad =
             take lineCount $ rowsToPad <> repeat ""
 
+-- Unpaginate in order to reflow text when screen dimensions change
+unpaginate :: [Text.Text] -> Text.Text 
+unpaginate pages = Text.concat $ map (Text.unlines . init . Text.lines) pages
 
 -- Status Line
 
