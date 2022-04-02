@@ -7,11 +7,14 @@ module HCat ( runHCat ) where
 
 import qualified Control.Exception as Exception
 import qualified Data.ByteString as BS
+import Data.Foldable (toList)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import qualified Data.Time.Clock as Clock
 import qualified Data.Time.Format as TimeFormat
 import qualified Data.Time.Clock.POSIX as PosixClock
+import qualified Data.Sequence as Seq
+import Data.Sequence ( Seq (..), (><) ) 
 import qualified System.Directory as Directory
 import qualified System.Environment as Env
 import System.Info
@@ -35,7 +38,7 @@ runHCat1 targetFilePath = do
     contents <- TextIO.hGetContents =<< openFile targetFilePath ReadMode 
     hSetBuffering stdout NoBuffering
     finfo <- fileInfo targetFilePath
-    paginateAndShow finfo contents []
+    paginateAndShow finfo contents
 
 -- Unify error handling approach by throwing an exception after handle args (turning the Either result into an IO Error)
 handleArgs :: IO (Either String [FilePath])
@@ -95,34 +98,37 @@ wordWrap lineLength lineText
             | otherwise = softWrap hardwrappedText (textIndex - 1) 
 
 -- Paginate the file contents and show the pages. 
--- We maintain a stack of the pages that have been viewed so we can pop the stack and redisplay pages when 
--- paging backwards
+-- We use Sequence to add viewed pages to the back so they can be retrieved when paging backwards
+-- When we create the pages, we add a blank page at the end as a sentinel value to mark the end of the pages
 -- We reflow the pagination by unpaginating the pages and the stack, and then paginate with the new dimensions
-paginateAndShow :: FileInfo -> Text.Text -> [Text.Text] -> IO ()
-paginateAndShow finfo contents stack = do
+paginateAndShow :: FileInfo -> Text.Text -> IO ()
+paginateAndShow finfo contents = do
     termSize <- getTerminalSize
-    let pages = paginate termSize finfo contents
-    showPages pages stack
+    let pages = Seq.fromList (paginate termSize finfo contents) :|> ""
+    showPages pages
 
     where
-        showPages :: [Text.Text] -> [Text.Text] -> IO ()
-        showPages [] _ = return ()
-        showPages (page:pages) stack =
-            clearScreen
-            >> TextIO.putStrLn page
-            >> getContinue
-            >>= \case
-                    Continue -> showPages pages (page:stack)
-                    Backwards -> if null stack 
-                                    then showPages (page : pages) stack
-                                    else showPages ((head stack) : page : pages) (tail stack)
-                    Reflow -> do
-                        termSize' <- getTerminalSize
-                        paginateAndShow finfo 
-                                        (unpaginate (page:pages)) 
-                                        (paginate termSize' finfo (unpaginate stack))
-                    Help -> showHelp >> showPages (page:pages) stack
-                    Cancel -> return ()
+        showPages :: Seq.Seq Text.Text-> IO ()
+        showPages ps =
+            case ps of
+                Seq.Empty -> return ()
+                "" :<| _ -> return ()
+                page :<| pages ->
+                    clearScreen
+                    >> TextIO.putStrLn page
+                    >> getContinue
+                    >>= \case
+                            Continue -> showPages (pages :|> page)
+                            Backwards -> 
+                                let
+                                    pages' :|> page' = pages
+                                in
+                                    if Text.null page' 
+                                        then showPages (page :<| pages)
+                                        else showPages (page' :<| page :<| pages')
+                            Help -> showHelp >> showPages ps
+                            Reflow -> paginateAndShow finfo (unpaginate ps)
+                            Cancel -> return ()
 
 clearScreen :: IO ()
 clearScreen = BS.putStr "\^[[1J\^[[1;1H"
@@ -183,8 +189,15 @@ paginate (ScreenDimensions rows cols) finfo text =
             take lineCount $ rowsToPad <> repeat ""
 
 -- Unpaginate in order to reflow text when screen dimensions change
-unpaginate :: [Text.Text] -> Text.Text 
-unpaginate pages = Text.concat $ map (Text.unlines . init . Text.lines) pages
+-- For now, we'll start viewing at the beginning of the file after reflowing, so break
+-- the sequence apart using the sentinel ("") and glue them in order.
+-- We need to remove the status line and the padding at the end of the file.
+unpaginate :: Seq.Seq Text.Text -> Text.Text 
+unpaginate pages = Text.stripEnd . Text.concat $ map (Text.unlines . init' . Text.lines) (toList $ pagesR >< pagesL)
+    where
+        init' x = if null x then [] else (init x)
+        pagesR = Seq.takeWhileR (/= "") pages
+        pagesL = Seq.takeWhileL (/= "") pages
 
 -- Status Line
 

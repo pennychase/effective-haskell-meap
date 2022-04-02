@@ -31,6 +31,7 @@ library
     -- other-extensions:
     build-depends:    base ^>=4.14.3.0
                     , bytestring
+                    , containers
                     , text
                     , process
                     , directory
